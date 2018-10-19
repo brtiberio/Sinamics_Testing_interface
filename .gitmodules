@@ -1,0 +1,3 @@
+[submodule "Sinamics_Canopen"]
+	path = Sinamics_Canopen
+	url = https://github.com/brtiberio/Sinamics_Canopen.git
