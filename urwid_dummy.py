@@ -49,8 +49,14 @@ def return_main(button):
 
 
 def set_seed(button, response):
-    body_speed.set_text('{0:+05d} RPM'.format(response.value()))
-    main_menu.original_widget = urwid.Padding(menu_render)
+    try:
+        velocity = int(response.edit_text)
+        body_speed.set_text('{0:+05d} RPM'.format(velocity))
+    except ValueError:
+        logging.info("Velocity value must be an integer")
+    finally:
+        main_menu.original_widget = urwid.Padding(menu_render)
+
 
 
 def item_chosen(button, choice):
@@ -61,7 +67,7 @@ def item_chosen(button, choice):
         main_menu.original_widget = urwid.Filler(
             urwid.Pile([response, urwid.AttrMap(done, None, focus_map='reversed')]))
     elif choice == 'Set Speed':
-        response = urwid.IntEdit('Enter RPMs\n', default=0)
+        response = urwid.Edit(caption='Enter RPMs\n', edit_text='0')
         done = urwid.Button(u'Ok')
         urwid.connect_signal(done, 'click', set_seed, response)
         main_menu.original_widget = urwid.Filler(

@@ -4,8 +4,8 @@ import logging
 from Sinamics_Canopen.sinamics import SINAMICS
 from can import CanError
 
-# import pydevd
-# pydevd.settrace('localhost', port=8000, stdoutToServer=True, stderrToServer=True)
+import pydevd
+pydevd.settrace('192.168.1.181', port=8000, stdoutToServer=True, stderrToServer=True)
 
 
 # instantiate object
@@ -140,27 +140,38 @@ class Interface:
         self.main_menu.original_widget = urwid.Padding(self.menu_render)
 
     def set_seed(self, button, response):
-        self.body_speed.set_text('{0:+05d} RPM'.format(response.value()))
-        self.main_menu.original_widget = urwid.Padding(self.menu_render)
+        try:
+            velocity = int(response.edit_text)
+            inverter.setTargetVelocity(velocity)
+        except ValueError:
+            logging.info("Velocity value must be an integer")
+        finally:
+            self.main_menu.original_widget = urwid.Padding(self.menu_render)
 
     def item_chosen(self, button, choice):
         if choice == 'Toggle ON/OFF':
             # if is enable, disable it
             if self.state:
-                # inverter.writeObject(0x6040, 0, (0).to_bytes(2, 'little'))
                 inverter.changeState('shutdown')
                 self.state = False
+                id = inverter.checkState()
             else:
-                inverter.writeObject(0x6040, 0, (15).to_bytes(2, 'little'))
-                # inverter.changeState('enable operation')
+                inverter.changeState('enable operation')
+                # TODO add status word check
                 self.state = True
-            response = urwid.Text(['Inverter is {0}'.format(('ON' if self.state else 'OFF')), u'\n'])
+                id = inverter.checkState()
+                if id == 7:
+                    self.state = True
+                else:
+                    self.state = False
+
+            response = urwid.Text(['Inverter is {0}'.format(inverter.state[id]), u'\n'])
             done = urwid.Button(u'Ok')
             urwid.connect_signal(done, 'click', self.return_main)
             self.main_menu.original_widget = urwid.Filler(
                 urwid.Pile([response, urwid.AttrMap(done, None, focus_map='reversed')]))
         elif choice == 'Set Speed':
-            response = urwid.IntEdit('Enter RPMs\n', default=0)
+            response = urwid.Edit(caption='Enter RPMs\n', edit_text='0')
             done = urwid.Button(u'Ok')
             urwid.connect_signal(done, 'click', self.set_seed, response)
             self.main_menu.original_widget = urwid.Filler(
@@ -187,14 +198,19 @@ def main():
         Show sample using also the EDS file.
     """
 
-    def print_message(message):
+    def print_velocity(message):
         logging.debug('{0} received'.format(message.name))
         # print("--")
         for var in message:
             logging.debug('{0} = {1:06X}'.format(var.name, var.raw))
+            if var.index == 0x6041:
+                pass
+            if var.index == 0x606C:
+                interface.body_speed.set_text('{0:+05d} RPM'.format(var.raw))
 
-        # inverter.printCurrentSmoothed()
-        # inverter.printTorqueSmoothed()
+    def refresh(_loop, _data):
+        _loop.draw_screen()
+        _loop.set_alarm_in(1, refresh)
 
     import argparse
     import sys
@@ -259,19 +275,16 @@ def main():
         inverter.node.pdo.tx[2].save()
 
         # Add callback for message reception
-        inverter.node.pdo.tx[2].add_callback(print_message)
+        inverter.node.pdo.tx[2].add_callback(print_velocity)
 
         # Set back into operational mode
         inverter.node.nmt.state = 'OPERATIONAL'
         sleep(0.1)
-        inverter.writeObject(0x6040, 0, (6).to_bytes(2, 'little'))
-        # inverter.changeState('shutdown')
+        inverter.changeState('shutdown')
         sleep(0.1)
-        inverter.writeObject(0x6040, 0, (7).to_bytes(2, 'little'))
-        # inverter.changeState('switch on')
+        inverter.changeState('switch on')
         sleep(0.1)
-        # inverter.writeObject(0x6040, 0, (15).to_bytes(2, 'little'))
-        # inverter.changeState('enable operation')
+        main_loop.set_alarm_in(1, refresh)
         main_loop.run()
     except KeyboardInterrupt as e:
         logging.info('Got {0}... exiting now'.format(e))
