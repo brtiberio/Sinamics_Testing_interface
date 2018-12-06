@@ -27,7 +27,7 @@ from Sinamics_Canopen.sinamics import SINAMICS
 from can import CanError
 
 # import pydevd
-# pydevd.settrace('192.168.1.181', port=8000, stdoutToServer=True, stderrToServer=True)
+# pydevd.settrace('192.168.31.124', port=8000, stdoutToServer=True, stderrToServer=True)
 
 
 # instantiate object
@@ -189,7 +189,7 @@ class Interface:
                 else:
                     self.state = False
 
-            response = urwid.Text(['Inverter is {0}'.format(inverter.state[id]), u'\n'])
+            response = urwid.Text(['Inverter is {0}'.format(inverter.state[new_id]), u'\n'])
             done = urwid.Button(u'Ok')
             urwid.connect_signal(done, 'click', self.return_main)
             self.main_menu.original_widget = urwid.Filler(
@@ -271,7 +271,7 @@ def main():
 
     main_loop = urwid.MainLoop(interface.rows_box, unhandled_input=interface.quit_on_q)
 
-    if not (inverter.begin(args.nodeID, object_dictionary=args.objDict)):
+    if not (inverter.begin(nodeID=args.nodeID, object_dictionary=args.objDict)):
         logging.info('Failed to begin connection with SINAMICS device')
         logging.info('Exiting now')
         return -1
