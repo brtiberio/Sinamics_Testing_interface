@@ -1,18 +1,40 @@
-#!/usr/bin/env python3
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+# The MIT License (MIT)
+# Copyright (c) 2018 Bruno Tibério
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import urwid
 import logging
 from Sinamics_Canopen.sinamics import SINAMICS
 from can import CanError
 
-import pydevd
-pydevd.settrace('192.168.1.181', port=8000, stdoutToServer=True, stderrToServer=True)
+# import pydevd
+# pydevd.settrace('192.168.1.181', port=8000, stdoutToServer=True, stderrToServer=True)
 
 
 # instantiate object
 inverter = SINAMICS()
 
 
-class urwidHandler(logging.Handler):
+class UrwidHandler(logging.Handler):
     """
     A handler class which writes logging records, appropriately formatted,
     to a urwid section.
@@ -93,7 +115,7 @@ class Interface:
                             filemode='w')
         # create handler for logger
         root_logger = logging.getLogger('')
-        self.body_logger = urwidHandler()
+        self.body_logger = UrwidHandler()
         root_logger.addHandler(self.body_logger)
         # add speed
         self.rows.append(self.header_speed)
@@ -142,7 +164,7 @@ class Interface:
     def set_seed(self, button, response):
         try:
             velocity = int(response.edit_text)
-            inverter.setTargetVelocity(velocity)
+            inverter.set_target_velocity(velocity)
         except ValueError:
             logging.info("Velocity value must be an integer")
         finally:
@@ -152,15 +174,17 @@ class Interface:
         if choice == 'Toggle ON/OFF':
             # if is enable, disable it
             if self.state:
-                inverter.changeState('shutdown')
-                self.state = False
-                id = inverter.checkState()
+                inverter.change_state('disable operation')
+                new_id = inverter.check_state()
+                # is it switched on state?
+                if new_id == 4:
+                    self.state = False
             else:
-                inverter.changeState('enable operation')
+                inverter.change_state('enable operation')
                 # TODO add status word check
                 self.state = True
-                id = inverter.checkState()
-                if id == 7:
+                new_id = inverter.check_state()
+                if new_id == 7:
                     self.state = True
                 else:
                     self.state = False
@@ -180,7 +204,8 @@ class Interface:
     def exit_program(self, button):
         raise urwid.ExitMainLoop()
 
-    def quit_on_q(self, key):
+    @staticmethod
+    def quit_on_q(key):
         if key == 'q':
             raise urwid.ExitMainLoop
 
@@ -189,16 +214,16 @@ class Interface:
             return
         logging.info(data)
 
+
 def main():
-    """Test SINAMICS CANopen communication with some examples.
-
-        Use a few examples to test communication with SINAMICS device using
-        a few functions. Also resets the fault error if present.
-
-        Show sample using also the EDS file.
+    """Test SINAMICS CANopen communication with urwid.
     """
 
     def print_velocity(message):
+        """Update text field in urwid velocity info with received speed data.
+        :param message:
+        :return:
+        """
         logging.debug('{0} received'.format(message.name))
         # print("--")
         for var in message:
@@ -211,6 +236,12 @@ def main():
     def refresh(_loop, _data):
         _loop.draw_screen()
         _loop.set_alarm_in(1, refresh)
+
+    def emcy_error_print(emcy_error):
+        """Print any EMCY Error Received on CAN BUS
+        """
+        logging.info('[{0}] Got an EMCY message: {1}'.format(
+            sys._getframe().f_code.co_name, emcy_error))
 
     import argparse
     import sys
@@ -240,12 +271,13 @@ def main():
 
     main_loop = urwid.MainLoop(interface.rows_box, unhandled_input=interface.quit_on_q)
 
-    if not (inverter.begin(args.nodeID, objectDictionary=args.objDict)):
+    if not (inverter.begin(args.nodeID, object_dictionary=args.objDict)):
         logging.info('Failed to begin connection with SINAMICS device')
         logging.info('Exiting now')
         return -1
 
     try:
+        inverter.node.emcy.add_callback(emcy_error_print)
         # testing pdo objects
         inverter.node.pdo.read()
         # Save new configuration (node must be in pre-operational)
@@ -268,7 +300,7 @@ def main():
         # inverter.node.pdo.tx[2].event_timer = 2000
         inverter.node.pdo.tx[2].trans_type = 254
         # reset
-        inverter.changeState('fault reset')
+        inverter.change_state('fault reset')
         sleep(0.1)
         # Save parameters to device and change to pre-operational
         inverter.node.nmt.state = 'PRE-OPERATIONAL'
@@ -280,9 +312,9 @@ def main():
         # Set back into operational mode
         inverter.node.nmt.state = 'OPERATIONAL'
         sleep(0.1)
-        inverter.changeState('shutdown')
+        inverter.change_state('shutdown')
         sleep(0.1)
-        inverter.changeState('switch on')
+        inverter.change_state('switch on')
         sleep(0.1)
         main_loop.set_alarm_in(1, refresh)
         main_loop.run()
@@ -297,9 +329,9 @@ def main():
     finally:
         # inverter.network.sync.stop()
         inverter.node.nmt.state = 'PRE-OPERATIONAL'
-        inverter.setTargetVelocity(0)
+        inverter.set_target_velocity(0)
         # inverter.writeObject(0x6040, 0, (0).to_bytes(2, 'little'))
-        inverter.changeState('shutdown')
+        inverter.change_state('shutdown')
     return
 
 
