@@ -237,12 +237,6 @@ def main():
         _loop.draw_screen()
         _loop.set_alarm_in(1, refresh)
 
-    def emcy_error_print(emcy_error):
-        """Print any EMCY Error Received on CAN BUS
-        """
-        logging.info('[{0}] Got an EMCY message: {1}'.format(
-            sys._getframe().f_code.co_name, emcy_error))
-
     import argparse
     import sys
     from time import sleep
@@ -277,7 +271,7 @@ def main():
         return -1
 
     try:
-        inverter.node.emcy.add_callback(emcy_error_print)
+        inverter.node.emcy.add_callback(inverter.emcy_error_print)
         # testing pdo objects
         inverter.node.pdo.read()
         # Save new configuration (node must be in pre-operational)
